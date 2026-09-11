@@ -44,12 +44,17 @@ jobs:
           echo "KEY=$KEY" >> "$GITHUB_ENV"
           echo "gateway key from the identity log: $KEY"
 
+      # The toolchain and the modules first, so their download notices stay out of the verdict.
+      - name: Fetch the checker's dependencies
+        working-directory: control
+        run: go mod download && go build ./cmd/verify ./cmd/anchor
+
       - name: The chains, the workings, the attestation, the anchors
         id: chains
         working-directory: control
         run: |
           set +e
-          go run ./cmd/verify --store ../evidence/store --key "$KEY" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json 2>&1 | grep -v '^WARN' | tee ../chains.txt
+          go run ./cmd/verify --store ../evidence/store --key "$KEY" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json 2>&1 | grep -Ev '^(WARN|go: )' | tee ../chains.txt
           echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: The identity log against the public ledger
@@ -58,7 +63,7 @@ jobs:
         run: |
           set +e
           printf '{"network":"testnet","topicId":"%s"}\n' "$HEDERA_TOPIC" > ../ledger.json
-          go run ./cmd/anchor identity check --log "$DID_LOG" --out ../evidence/anchors --hedera ../ledger.json 2>&1 | grep -v '^WARN' | tee ../identity.txt
+          go run ./cmd/anchor identity check --log "$DID_LOG" --out ../evidence/anchors --hedera ../ledger.json 2>&1 | grep -Ev '^(WARN|go: )' | tee ../identity.txt
           echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       # The record: what was checked, by which tooling, with which key, and the verdict, in
