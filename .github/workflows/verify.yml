@@ -1,0 +1,86 @@
+name: verify
+
+# Checks the evidence Above Beyond publishes about its agent, with public inputs only and
+# no credential of theirs. Fork this repository and switch Actions on: from then on your
+# account, on GitHub's machines, records a verification Above Beyond cannot touch. That is
+# what row 8.1.5 of the Proof-of-Control draft asks for: a recorded run by a party outside
+# the operator. Run by Above Beyond itself, it is a daily public run on GitHub's
+# infrastructure and nothing more; the conformance statement says so.
+
+on:
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      CONTROL_TAG: v0.13.0
+      DID_LOG: https://abovebeyond.ai/.well-known/did.jsonl
+      DID_DOC: https://abovebeyond.ai/.well-known/did.json
+      HEDERA_TOPIC: 0.0.10275637
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      # The evidence, the tooling, the key: three public places, none of them this repository.
+      - run: git clone --depth 1 https://github.com/abovebeyond-ai/control-evidence.git evidence
+      - run: git clone --depth 1 --branch "$CONTROL_TAG" https://github.com/abovebeyond-ai/control.git control
+      - name: The gateway's key, from the identity log and not from the evidence
+        run: |
+          KEY=$(curl -fsS "$DID_DOC" | python3 -c '
+          import sys, json, base64
+          doc = json.load(sys.stdin)
+          for m in doc["verificationMethod"]:
+              if m["id"].endswith("#control-gateway"):
+                  x = m["publicKeyJwk"]["x"]
+                  print(base64.urlsafe_b64decode(x + "=" * (-len(x) % 4)).hex())')
+          echo "KEY=$KEY" >> "$GITHUB_ENV"
+          echo "gateway key from the identity log: $KEY"
+
+      - name: The chains, the workings, the attestation, the anchors
+        id: chains
+        working-directory: control
+        run: |
+          set +e
+          go run ./cmd/verify --store ../evidence/store --key "$KEY" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json 2>&1 | grep -v '^WARN' | tee ../chains.txt
+          echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: The identity log against the public ledger
+        id: identity
+        working-directory: control
+        run: |
+          set +e
+          printf '{"network":"testnet","topicId":"%s"}\n' "$HEDERA_TOPIC" > ../ledger.json
+          go run ./cmd/anchor identity check --log "$DID_LOG" --out ../evidence/anchors --hedera ../ledger.json 2>&1 | grep -v '^WARN' | tee ../identity.txt
+          echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # The record: what was checked, by which tooling, with which key, and the verdict, in
+      # this repository under the account that ran it. Yours, if you forked.
+      - name: Record the verdict
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          VERDICT=holds
+          if [ "${{ steps.chains.outputs.exit }}" != "0" ] || [ "${{ steps.identity.outputs.exit }}" != "0" ]; then VERDICT=broken; fi
+          {
+            echo "# $VERDICT, $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "Run by \`${{ github.repository_owner }}\` on GitHub's runner, run id ${{ github.run_id }}, with control $CONTROL_TAG, the evidence at \`$(git -C evidence rev-parse --short HEAD)\`, the gateway key \`$KEY\` from $DID_DOC."
+            echo
+            echo '## The chains'; echo; echo '```'; cat chains.txt; echo '```'
+            echo
+            echo '## The identity log'; echo; echo '```'; cat identity.txt; echo '```'
+          } > "verdicts/$DATE.md"
+          cp "verdicts/$DATE.md" "$GITHUB_STEP_SUMMARY"
+          git config user.name "verify"
+          git config user.email "verify@users.noreply.github.com"
+          git add verdicts
+          git commit -qm "$VERDICT $DATE" || echo "no change to record"
+          git push
+          [ "$VERDICT" = holds ]
