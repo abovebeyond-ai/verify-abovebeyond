@@ -22,7 +22,8 @@ jobs:
       CONTROL_TAG: v0.16.2
       DID_LOG: https://abovebeyond.ai/.well-known/did.jsonl
       DID_DOC: https://abovebeyond.ai/.well-known/did.json
-      HEDERA_TOPIC: 0.0.10275637
+      HEDERA_TOPIC: 0.0.10856156
+      HEDERA_NETWORK: mainnet
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -69,7 +70,7 @@ jobs:
         working-directory: control
         run: |
           set +e
-          printf '{"network":"testnet","topicId":"%s"}\n' "$HEDERA_TOPIC" > ../ledger.json
+          printf '{"network":"%s","topicId":"%s"}\n' "$HEDERA_NETWORK" "$HEDERA_TOPIC" > ../ledger.json
           go run ./cmd/anchor identity check --log "$DID_LOG" --out ../evidence/anchors --hedera ../ledger.json 2>&1 | grep -Ev '^(WARN|go: )' | tee ../identity.txt
           echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
