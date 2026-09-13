@@ -19,7 +19,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      CONTROL_TAG: v0.16.2
+      CONTROL_TAG: v0.16.3
       DID_LOG: https://abovebeyond.ai/.well-known/did.jsonl
       DID_DOC: https://abovebeyond.ai/.well-known/did.json
       HEDERA_TOPIC: 0.0.10856156
@@ -33,7 +33,11 @@ jobs:
       # The evidence, the tooling, the key: three public places, none of them this repository.
       - run: git clone --depth 1 https://github.com/abovebeyond-ai/control-evidence.git evidence
       - run: git clone --depth 1 --branch "$CONTROL_TAG" https://github.com/abovebeyond-ai/control.git control
-      - name: The gateway's key, from the identity log and not from the evidence
+      # The keys come from the identity log itself (control v0.16.3): every key the
+      # gateway ever had, so a rebuilt machine with a new key leaves its predecessor's
+      # chains verifiable, and the current one for the attestation. The verdict names the
+      # current one, read the same way, for the record.
+      - name: The gateway's current key, for the record
         run: |
           KEY=$(curl -fsS "$DID_DOC" | python3 -c '
           import sys, json, base64
@@ -62,7 +66,7 @@ jobs:
         working-directory: control
         run: |
           set +e
-          go run ./cmd/verify --store ../evidence/store --key "$KEY" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json --release-sha384 "$RELEASE_SHA384" 2>&1 | grep -Ev '^(WARN|go: )' | tee ../chains.txt
+          go run ./cmd/verify --store ../evidence/store --did-log "$DID_LOG" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json --release-sha384 "$RELEASE_SHA384" 2>&1 | grep -Ev '^(WARN|go: )' | tee ../chains.txt
           echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: The identity log against the public ledger
