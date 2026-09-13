@@ -19,7 +19,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      CONTROL_TAG: v0.16.3
+      CONTROL_TAG: v0.16.4
       DID_LOG: https://abovebeyond.ai/.well-known/did.jsonl
       DID_DOC: https://abovebeyond.ai/.well-known/did.json
       HEDERA_TOPIC: 0.0.10856156
@@ -54,19 +54,15 @@ jobs:
         working-directory: control
         run: go mod download && go build ./cmd/verify ./cmd/anchor
 
-      # The release asset at the same tag, hashed here: the machine measures its binary
-      # into RTMR3, and the checker holds that to this hash (control v0.15.0 and later).
-      - name: The release asset
-        run: |
-          curl -fsSL -o control-gateway-linux-amd64 "https://github.com/abovebeyond-ai/control/releases/download/$CONTROL_TAG/control-gateway-linux-amd64"
-          echo "RELEASE_SHA384=$(sha384sum control-gateway-linux-amd64 | cut -d' ' -f1)" >> "$GITHUB_ENV"
-
+      # The release the machine runs is read from its records; the checker fetches that
+      # asset, holds it to the sha256 the records name and RTMR3 to its SHA-384 (v0.16.4).
+      # The checker's own tag above is not the reference, and need not match the machine.
       - name: The chains, the workings, the attestation and its layers, the anchors
         id: chains
         working-directory: control
         run: |
           set +e
-          go run ./cmd/verify --store ../evidence/store --did-log "$DID_LOG" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json --release-sha384 "$RELEASE_SHA384" 2>&1 | grep -Ev '^(WARN|go: )' | tee ../chains.txt
+          go run ./cmd/verify --store ../evidence/store --did-log "$DID_LOG" --anchors ../evidence/anchors --attestation ../evidence/store/attestation.json 2>&1 | grep -Ev '^(WARN|go: )' | tee ../chains.txt
           echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: The identity log against the public ledger
