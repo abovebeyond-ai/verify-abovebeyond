@@ -19,7 +19,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      CONTROL_TAG: v0.16.4
+      CONTROL_TAG: v0.29.0
       DID_LOG: https://abovebeyond.ai/.well-known/did.jsonl
       DID_DOC: https://abovebeyond.ai/.well-known/did.json
       HEDERA_TOPIC: 0.0.10856156
@@ -56,7 +56,14 @@ jobs:
 
       # The release the machine runs is read from its records; the checker fetches that
       # asset, holds it to the sha256 the records name and RTMR3 to its SHA-384 (v0.16.4).
-      # The checker's own tag above is not the reference, and need not match the machine.
+      #
+      # The checker's own tag above is not the reference, but it does have to be able to
+      # read what the machine writes, and that is not the same thing. Pinned at v0.16.4 it
+      # could not: from 14 to 19 September 2026 this watch published "broken" every day on
+      # the one line "the measured binary is not the release asset", while the same check
+      # under v0.29.0 held, with 35 holds and no break. Six days of a public verdict that
+      # said the evidence was bad when the checker was simply too old to read it. So this
+      # tag moves with the gateway's releases: when control is tagged, raise it here too.
       - name: The chains, the workings, the attestation and its layers, the anchors
         id: chains
         working-directory: control
